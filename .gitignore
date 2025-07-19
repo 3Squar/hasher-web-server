@@ -2,3 +2,11 @@
 .idea/*
 .env
 .env*
+.vscode/
+*.exe
+main
+bin/
+*.test
+*.out
+go.work
+.DS_Store

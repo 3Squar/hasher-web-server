@@ -1,11 +1,14 @@
 package main
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"game_web_server/generated"
+	"hash/fnv"
 	"log"
 	"reflect"
+	"strconv"
 	"sync"
 
 	"game_web_server/pkg/schema"
@@ -20,6 +23,7 @@ type Position struct {
 }
 type Player struct {
 	ID string `json:"id"`
+	IP string `json:"ip"`
 	Position
 }
 
@@ -38,12 +42,19 @@ type ActionProcessor struct {
 type GameHandler struct {
 	mut     sync.Mutex
 	players map[string]*Player
-	actions map[uint16]*ActionProcessor
+	actions map[string]*ActionProcessor
 }
 
-func (h *GameHandler) GetHandlerByAction(action uint16) (ActionHandlerType, error) {
-	if _, ok := h.actions[action]; ok {
-		return h.actions[action].handler, nil
+func makeActionName(action uint16, key string) string {
+	strAction := strconv.Itoa(int(action))
+	return strAction + "_" + key
+}
+
+func (h *GameHandler) GetHandlerByAction(action uint16, key string) (*ActionProcessor, error) {
+	actionName := makeActionName(action, key)
+
+	if _, ok := h.actions[actionName]; ok {
+		return h.actions[actionName], nil
 	}
 
 	return nil, errors.New("action not found")
@@ -51,6 +62,15 @@ func (h *GameHandler) GetHandlerByAction(action uint16) (ActionHandlerType, erro
 
 func (h *GameHandler) pingPongHandler(ctx *fasthttp.RequestCtx) {
 	fmt.Fprint(ctx, "pong")
+}
+
+func hash(str string) string {
+	newHash := fnv.New32a()
+	_, err := newHash.Write([]byte(str))
+	if err != nil {
+		return ""
+	}
+	return hex.EncodeToString(newHash.Sum(nil))
 }
 
 func (h *GameHandler) serveWebSocket(ctx *fasthttp.RequestCtx) {
@@ -65,18 +85,21 @@ func (h *GameHandler) serveWebSocket(ctx *fasthttp.RequestCtx) {
 
 		var player = &Player{}
 		remoteStrAddr := conn.RemoteAddr().String()
-		value, ok := h.players[remoteStrAddr]
+		playerId := hash(remoteStrAddr)
+
+		value, ok := h.players[playerId]
 		if !ok {
 			h.mut.Lock()
 			newPlayer := &Player{
-				ID: conn.RemoteAddr().String(),
+				ID: playerId,
+				IP: remoteStrAddr,
 				Position: Position{
 					X: 0,
 					Y: 0,
 				},
 			}
 
-			h.players[remoteStrAddr] = newPlayer
+			h.players[playerId] = newPlayer
 			h.mut.Unlock()
 		} else {
 			player = value
@@ -101,13 +124,21 @@ func (h *GameHandler) serveWebSocket(ctx *fasthttp.RequestCtx) {
 			}
 
 			action := clientAction.Action()
-			handler, err := h.GetHandlerByAction(action)
+			keyName := string(clientAction.Key())
+			processor, err := h.GetHandlerByAction(action, keyName)
 			if err != nil {
 				log.Println("[Error found action]", action, err.Error())
 				continue
 			}
 
-			handler(conn, clientAction)
+			processor.handler(conn, clientAction)
+
+			//keyName := string(clientAction.Key())
+			//if keyName == processor.key {
+			//	processor.handler(conn, clientAction)
+			//} else {
+			//	fmt.Println("[Error found key]", keyName, processor.key)
+			//}
 
 			//log.Printf("Received: %s", message)
 			// Echo the message back
@@ -126,12 +157,10 @@ func (h *GameHandler) serveWebSocket(ctx *fasthttp.RequestCtx) {
 }
 
 func (h *GameHandler) RegisterAction(action uint16, key string, handler ActionHandlerType) {
-	if h.actions == nil {
-		h.actions = make(map[uint16]*ActionProcessor)
-	}
+	actionName := makeActionName(action, key)
 
-	if _, ok := h.actions[action]; !ok {
-		h.actions[action] = &ActionProcessor{
+	if _, ok := h.actions[actionName]; !ok {
+		h.actions[actionName] = &ActionProcessor{
 			handler: handler,
 			key:     key,
 		}
@@ -197,8 +226,20 @@ func compileSchemas() error {
 	return nil
 }
 
-func handleAction(conn *websocket.Conn, ca *generated.ClientAction) {
-	fmt.Println("Handle Action", ca.Action(), ca.Key())
+func (h *GameHandler) handleMoveUp(conn *websocket.Conn, ca *generated.ClientAction) {
+	fmt.Println("Handle Action", string(ca.Key()))
+}
+
+func (h *GameHandler) handleMoveDown(conn *websocket.Conn, ca *generated.ClientAction) {
+	fmt.Println("Handle Action", string(ca.Key()))
+}
+
+func (h *GameHandler) handleMoveLeft(conn *websocket.Conn, ca *generated.ClientAction) {
+	fmt.Println("Handle Action", string(ca.Key()))
+}
+
+func (h *GameHandler) handleMoveRight(conn *websocket.Conn, ca *generated.ClientAction) {
+	fmt.Println("Handle Action", string(ca.Key()))
 }
 
 func main() {
@@ -218,10 +259,14 @@ func main() {
 
 	gameHandler := &GameHandler{
 		players: make(map[string]*Player),
-		actions: make(map[uint16]*ActionProcessor),
+		actions: make(map[string]*ActionProcessor),
 	}
 
-	gameHandler.RegisterAction(1, "D", handleAction)
+	//1 - for player move
+	gameHandler.RegisterAction(1, "W", gameHandler.handleMoveUp)
+	gameHandler.RegisterAction(1, "S", gameHandler.handleMoveDown)
+	gameHandler.RegisterAction(1, "D", gameHandler.handleMoveRight)
+	gameHandler.RegisterAction(1, "A", gameHandler.handleMoveLeft)
 
 	fmt.Println("\nStarting web server on :8080...")
 	err := fasthttp.ListenAndServe(":8080", gameHandler.HandleFastHTTP)

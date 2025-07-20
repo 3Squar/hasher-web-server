@@ -49,19 +49,15 @@ func (rcv *Player) Id() []byte {
 	return nil
 }
 
-func (rcv *Player) X() float64 {
+func (rcv *Player) Ip() []byte {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(6))
 	if o != 0 {
-		return rcv._tab.GetFloat64(o + rcv._tab.Pos)
+		return rcv._tab.ByteVector(o + rcv._tab.Pos)
 	}
-	return 0.0
+	return nil
 }
 
-func (rcv *Player) MutateX(n float64) bool {
-	return rcv._tab.MutateFloat64Slot(6, n)
-}
-
-func (rcv *Player) Y() float64 {
+func (rcv *Player) X() float64 {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(8))
 	if o != 0 {
 		return rcv._tab.GetFloat64(o + rcv._tab.Pos)
@@ -69,21 +65,36 @@ func (rcv *Player) Y() float64 {
 	return 0.0
 }
 
-func (rcv *Player) MutateY(n float64) bool {
+func (rcv *Player) MutateX(n float64) bool {
 	return rcv._tab.MutateFloat64Slot(8, n)
 }
 
+func (rcv *Player) Y() float64 {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(10))
+	if o != 0 {
+		return rcv._tab.GetFloat64(o + rcv._tab.Pos)
+	}
+	return 0.0
+}
+
+func (rcv *Player) MutateY(n float64) bool {
+	return rcv._tab.MutateFloat64Slot(10, n)
+}
+
 func PlayerStart(builder *flatbuffers.Builder) {
-	builder.StartObject(3)
+	builder.StartObject(4)
 }
 func PlayerAddId(builder *flatbuffers.Builder, id flatbuffers.UOffsetT) {
 	builder.PrependUOffsetTSlot(0, flatbuffers.UOffsetT(id), 0)
 }
+func PlayerAddIp(builder *flatbuffers.Builder, ip flatbuffers.UOffsetT) {
+	builder.PrependUOffsetTSlot(1, flatbuffers.UOffsetT(ip), 0)
+}
 func PlayerAddX(builder *flatbuffers.Builder, x float64) {
-	builder.PrependFloat64Slot(1, x, 0.0)
+	builder.PrependFloat64Slot(2, x, 0.0)
 }
 func PlayerAddY(builder *flatbuffers.Builder, y float64) {
-	builder.PrependFloat64Slot(2, y, 0.0)
+	builder.PrependFloat64Slot(3, y, 0.0)
 }
 func PlayerEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()

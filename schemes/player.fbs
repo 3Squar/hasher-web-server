@@ -7,6 +7,7 @@ struct Position {
 
 table Player {
   id: string;
+  ip: string;
   x: float64;
   y: float64;
 }

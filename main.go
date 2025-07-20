@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"game_web_server/generated"
 	"log"
@@ -27,9 +28,25 @@ type ClientAction struct {
 	Key    string `json:"key"`
 }
 
+type ActionHandlerType = func(conn *websocket.Conn, ca *generated.ClientAction)
+
+type ActionProcessor struct {
+	handler ActionHandlerType
+	key     string
+}
+
 type GameHandler struct {
 	mut     sync.Mutex
 	players map[string]*Player
+	actions map[uint16]*ActionProcessor
+}
+
+func (h *GameHandler) GetHandlerByAction(action uint16) (ActionHandlerType, error) {
+	if _, ok := h.actions[action]; ok {
+		return h.actions[action].handler, nil
+	}
+
+	return nil, errors.New("action not found")
 }
 
 func (h *GameHandler) pingPongHandler(ctx *fasthttp.RequestCtx) {
@@ -84,13 +101,13 @@ func (h *GameHandler) serveWebSocket(ctx *fasthttp.RequestCtx) {
 			}
 
 			action := clientAction.Action()
-			key := string(clientAction.Key())
-
-			if action == 1 && key == "D" {
-				fmt.Println("D")
+			handler, err := h.GetHandlerByAction(action)
+			if err != nil {
+				log.Println("[Error found action]", action, err.Error())
+				continue
 			}
 
-			fmt.Printf("ClientAction key: %s %d\n", key, action)
+			handler(conn, clientAction)
 
 			//log.Printf("Received: %s", message)
 			// Echo the message back
@@ -105,6 +122,19 @@ func (h *GameHandler) serveWebSocket(ctx *fasthttp.RequestCtx) {
 	if err != nil {
 		log.Printf("WebSocket upgrade failed: %v", err)
 		ctx.Error("WebSocket upgrade failed", fasthttp.StatusInternalServerError)
+	}
+}
+
+func (h *GameHandler) RegisterAction(action uint16, key string, handler ActionHandlerType) {
+	if h.actions == nil {
+		h.actions = make(map[uint16]*ActionProcessor)
+	}
+
+	if _, ok := h.actions[action]; !ok {
+		h.actions[action] = &ActionProcessor{
+			handler: handler,
+			key:     key,
+		}
 	}
 }
 
@@ -167,6 +197,10 @@ func compileSchemas() error {
 	return nil
 }
 
+func handleAction(conn *websocket.Conn, ca *generated.ClientAction) {
+	fmt.Println("Handle Action", ca.Action(), ca.Key())
+}
+
 func main() {
 	fmt.Println("Hello World")
 
@@ -184,7 +218,10 @@ func main() {
 
 	gameHandler := &GameHandler{
 		players: make(map[string]*Player),
+		actions: make(map[uint16]*ActionProcessor),
 	}
+
+	gameHandler.RegisterAction(1, "D", handleAction)
 
 	fmt.Println("\nStarting web server on :8080...")
 	err := fasthttp.ListenAndServe(":8080", gameHandler.HandleFastHTTP)

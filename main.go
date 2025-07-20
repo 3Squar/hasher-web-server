@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"game_web_server/generated"
+	flatbuffers "github.com/google/flatbuffers/go"
 	"hash/fnv"
 	"log"
+	"net"
 	"reflect"
 	"strconv"
 	"sync"
@@ -32,7 +34,7 @@ type ClientAction struct {
 	Key    string `json:"key"`
 }
 
-type ActionHandlerType = func(conn *websocket.Conn, ca *generated.ClientAction)
+type ActionHandlerType = func(conn *websocket.Conn, player *Player)
 
 type ActionProcessor struct {
 	handler ActionHandlerType
@@ -40,9 +42,10 @@ type ActionProcessor struct {
 }
 
 type GameHandler struct {
-	mut     sync.Mutex
-	players map[string]*Player
-	actions map[string]*ActionProcessor
+	mut         sync.Mutex
+	connections map[string]*websocket.Conn
+	players     map[string]*Player
+	actions     map[string]*ActionProcessor
 }
 
 func makeActionName(action uint16, key string) string {
@@ -65,12 +68,30 @@ func (h *GameHandler) pingPongHandler(ctx *fasthttp.RequestCtx) {
 }
 
 func hash(str string) string {
+	fmt.Printf("Hashing string: '%s' (length: %d)\n", str, len(str))
+	fmt.Printf("Bytes: %v\n", []byte(str))
+
 	newHash := fnv.New32a()
 	_, err := newHash.Write([]byte(str))
 	if err != nil {
+		fmt.Printf("Error writing to hash: %v\n", err)
 		return ""
 	}
-	return hex.EncodeToString(newHash.Sum(nil))
+
+	result := hex.EncodeToString(newHash.Sum(nil))
+	fmt.Printf("Result hash: %s\n", result)
+	return result
+}
+
+func hashIP(address string) string {
+	// Извлекаем только IP, убираем порт
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		// Если нет порта, используем всю строку
+		host = address
+	}
+
+	return hash(host)
 }
 
 func (h *GameHandler) serveWebSocket(ctx *fasthttp.RequestCtx) {
@@ -81,41 +102,46 @@ func (h *GameHandler) serveWebSocket(ctx *fasthttp.RequestCtx) {
 	}
 
 	err := upgrader.Upgrade(ctx, func(conn *websocket.Conn) {
-		defer conn.Close()
-
-		var player = &Player{}
 		remoteStrAddr := conn.RemoteAddr().String()
 		playerId := hash(remoteStrAddr)
 
-		value, ok := h.players[playerId]
+		defer func() {
+			conn.Close()
+			h.connections[playerId] = nil
+		}()
+
+		h.connections[playerId] = conn
+		_, ok := h.players[playerId]
 		if !ok {
 			h.mut.Lock()
 			newPlayer := &Player{
 				ID: playerId,
 				IP: remoteStrAddr,
 				Position: Position{
-					X: 0,
-					Y: 0,
+					X: 250,
+					Y: 250,
 				},
 			}
 
 			h.players[playerId] = newPlayer
 			h.mut.Unlock()
-		} else {
-			player = value
 		}
+
+		var player = h.players[playerId]
+
+		go h.broadcastPlayer(player)
 
 		fmt.Printf("WebSocket connection from: %s\n", ctx.RemoteAddr())
 		fmt.Println(player.ID, player.Position.X, player.Position.Y)
 
 		for {
-			messageType, message, err := conn.ReadMessage()
+			_, message, err := conn.ReadMessage()
 			if err != nil {
 				log.Println("Read error:", err)
 				break
 			}
 
-			log.Printf("Receive message type: %d\n", messageType)
+			//log.Printf("Receive message type: %d\n", messageType)
 
 			clientAction := generated.GetRootAsClientAction(message, 0)
 			if clientAction == nil {
@@ -131,22 +157,8 @@ func (h *GameHandler) serveWebSocket(ctx *fasthttp.RequestCtx) {
 				continue
 			}
 
-			processor.handler(conn, clientAction)
-
-			//keyName := string(clientAction.Key())
-			//if keyName == processor.key {
-			//	processor.handler(conn, clientAction)
-			//} else {
-			//	fmt.Println("[Error found key]", keyName, processor.key)
-			//}
-
-			//log.Printf("Received: %s", message)
-			// Echo the message back
-			//err = conn.WriteMessage(messageType, message)
-			//if err != nil {
-			//	log.Println("Write error:", err)
-			//	break
-			//}
+			processor.handler(conn, player)
+			h.broadcastPlayer(player)
 		}
 	})
 
@@ -154,6 +166,39 @@ func (h *GameHandler) serveWebSocket(ctx *fasthttp.RequestCtx) {
 		log.Printf("WebSocket upgrade failed: %v", err)
 		ctx.Error("WebSocket upgrade failed", fasthttp.StatusInternalServerError)
 	}
+}
+
+func buildPlayerForBroadcast(player *Player) []byte {
+	builder := flatbuffers.NewBuilder(1024)
+
+	buildPlayerID := builder.CreateString(player.ID)
+	buildPlayerIP := builder.CreateString(player.IP)
+
+	generated.PlayerStart(builder)
+	generated.PlayerAddId(builder, buildPlayerID)
+	generated.PlayerAddIp(builder, buildPlayerIP)
+	generated.PlayerAddX(builder, player.Position.X)
+	generated.PlayerAddY(builder, player.Position.Y)
+	buildPlayer := generated.PlayerEnd(builder)
+
+	builder.Finish(buildPlayer)
+	return builder.FinishedBytes()
+}
+
+func (h *GameHandler) broadcast(data []byte) {
+	for _, conn := range h.connections {
+		go func() {
+			err := conn.WriteMessage(websocket.BinaryMessage, data)
+			if err != nil {
+				log.Println("Write error:", err)
+			}
+		}()
+	}
+}
+
+func (h *GameHandler) broadcastPlayer(player *Player) {
+	buildForSend := buildPlayerForBroadcast(player)
+	h.broadcast(buildForSend)
 }
 
 func (h *GameHandler) RegisterAction(action uint16, key string, handler ActionHandlerType) {
@@ -226,20 +271,28 @@ func compileSchemas() error {
 	return nil
 }
 
-func (h *GameHandler) handleMoveUp(conn *websocket.Conn, ca *generated.ClientAction) {
-	fmt.Println("Handle Action", string(ca.Key()))
+func (h *GameHandler) handleMoveUp(conn *websocket.Conn, player *Player) {
+	h.mut.Lock()
+	player.Position.Y += 10
+	h.mut.Unlock()
 }
 
-func (h *GameHandler) handleMoveDown(conn *websocket.Conn, ca *generated.ClientAction) {
-	fmt.Println("Handle Action", string(ca.Key()))
+func (h *GameHandler) handleMoveDown(conn *websocket.Conn, player *Player) {
+	h.mut.Lock()
+	player.Position.Y -= 10
+	h.mut.Unlock()
 }
 
-func (h *GameHandler) handleMoveLeft(conn *websocket.Conn, ca *generated.ClientAction) {
-	fmt.Println("Handle Action", string(ca.Key()))
+func (h *GameHandler) handleMoveLeft(conn *websocket.Conn, player *Player) {
+	h.mut.Lock()
+	player.Position.X -= 10
+	h.mut.Unlock()
 }
 
-func (h *GameHandler) handleMoveRight(conn *websocket.Conn, ca *generated.ClientAction) {
-	fmt.Println("Handle Action", string(ca.Key()))
+func (h *GameHandler) handleMoveRight(conn *websocket.Conn, player *Player) {
+	h.mut.Lock()
+	player.Position.X += 10
+	h.mut.Unlock()
 }
 
 func main() {
@@ -258,8 +311,9 @@ func main() {
 	}
 
 	gameHandler := &GameHandler{
-		players: make(map[string]*Player),
-		actions: make(map[string]*ActionProcessor),
+		connections: make(map[string]*websocket.Conn),
+		players:     make(map[string]*Player),
+		actions:     make(map[string]*ActionProcessor),
 	}
 
 	//1 - for player move

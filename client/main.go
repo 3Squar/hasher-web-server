@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"game_web_server/generated"
 	"gioui.org/op/clip"
 	"gioui.org/op/paint"
@@ -11,12 +10,15 @@ import (
 	"image/color"
 	"log"
 	"os"
+	"time"
 
 	"gioui.org/app"
 	"gioui.org/io/event"
 	"gioui.org/io/key"
 	"gioui.org/op"
 )
+
+var connections = make(map[string]*generated.Player)
 
 func main() {
 	go func() {
@@ -56,7 +58,14 @@ func roomConnector(keyNamePressed <-chan string) {
 				log.Println("read:", err)
 				return
 			}
-			log.Printf("recv: %s", message)
+
+			playerData := generated.GetRootAsPlayer(message, 0)
+			if playerData == nil {
+				continue
+			}
+
+			playerId := string(playerData.Id())
+			connections[playerId] = playerData
 		}
 	}()
 
@@ -76,19 +85,20 @@ func roomConnector(keyNamePressed <-chan string) {
 			builder.Finish(clientAction)
 			finalBuild := builder.FinishedBytes()
 
-			fmt.Println("Send ressed key %s", keyN)
+			//fmt.Println("Send ressed key %s", keyN)
 
 			err := c.WriteMessage(websocket.TextMessage, finalBuild)
 			if err != nil {
-				log.Println("write:", err)
+				//log.Println("write:", err)
 				return
 			}
 		}
 	}
 }
 
-func moveReact(ops *op.Ops, x, y int) {
-	defer op.Offset(image.Pt(x, y)).Push(ops).Pop()
+func moveReact(ops *op.Ops, player *generated.Player) {
+	pX, pY := int(player.X()), int(player.Y())
+	defer op.Offset(image.Pt(pX, pY)).Push(ops).Pop()
 	drawRedRect(ops)
 }
 
@@ -96,9 +106,17 @@ func run(w *app.Window) error {
 	var keyNamePressed = make(chan string)
 	go roomConnector(keyNamePressed)
 
+	ticker := time.NewTicker(20 * time.Millisecond)
+	defer ticker.Stop()
+
+	go func() {
+		for range ticker.C {
+			w.Invalidate()
+		}
+	}()
+
 	var ops op.Ops
 	var tag = &ops
-	var xPos, yPos = 250, 250
 
 	for {
 		switch e := w.Event().(type) {
@@ -119,15 +137,15 @@ func run(w *app.Window) error {
 					break
 				}
 
-				if x, ok := ev.(key.Event); ok {
-					if x.State == key.Press {
-						log.Println("Кнопка нажата", string(x.Name))
-						keyNamePressed <- string(x.Name)
-					}
+				if x, ok := ev.(key.Event); ok && x.State == key.Press {
+					keyNamePressed <- string(x.Name)
 				}
 			}
 
-			moveReact(&ops, xPos, yPos)
+			for _, player := range connections {
+				moveReact(&ops, player)
+			}
+
 			e.Frame(gtx.Ops)
 		}
 	}

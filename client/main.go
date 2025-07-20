@@ -37,7 +37,7 @@ func drawRedRect(ops *op.Ops) {
 	paint.PaintOp{}.Add(ops)
 }
 
-func roomConnedtor(keyNamePressed <-chan string) {
+func roomConnector(keyNamePressed <-chan string) {
 	c, _, err := websocket.DefaultDialer.Dial("ws://localhost:8080/game", nil)
 	if err != nil {
 		log.Fatal(err)
@@ -94,7 +94,7 @@ func moveReact(ops *op.Ops, x, y int) {
 
 func run(w *app.Window) error {
 	var keyNamePressed = make(chan string)
-	go roomConnedtor(keyNamePressed)
+	go roomConnector(keyNamePressed)
 
 	var ops op.Ops
 	var tag = &ops
@@ -113,18 +113,16 @@ func run(w *app.Window) error {
 			gtx.Execute(key.FocusCmd{Tag: tag})
 
 			for {
-				ev, ok := gtx.Event(key.Filter{
-					Name: "D",
-				})
+				ev, ok := gtx.Event(key.Filter{})
 
 				if !ok {
 					break
 				}
 
 				if x, ok := ev.(key.Event); ok {
-					if x.Name == "D" && x.State == key.Press {
-						log.Println("Кнопка D нажата")
-						keyNamePressed <- "D"
+					if x.State == key.Press {
+						log.Println("Кнопка нажата", string(x.Name))
+						keyNamePressed <- string(x.Name)
 					}
 				}
 			}

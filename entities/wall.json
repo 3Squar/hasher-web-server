@@ -1,0 +1,9 @@
+{
+  "name": "wall_1",
+  "image": "none",
+  "x": 0,
+  "y": 0,
+  "width": 50,
+  "height": 1000,
+  "is_collision": true
+}

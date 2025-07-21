@@ -81,8 +81,32 @@ func (rcv *Player) MutateY(n float64) bool {
 	return rcv._tab.MutateFloat64Slot(10, n)
 }
 
+func (rcv *Player) Width() int32 {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(12))
+	if o != 0 {
+		return rcv._tab.GetInt32(o + rcv._tab.Pos)
+	}
+	return 0
+}
+
+func (rcv *Player) MutateWidth(n int32) bool {
+	return rcv._tab.MutateInt32Slot(12, n)
+}
+
+func (rcv *Player) Height() int32 {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(14))
+	if o != 0 {
+		return rcv._tab.GetInt32(o + rcv._tab.Pos)
+	}
+	return 0
+}
+
+func (rcv *Player) MutateHeight(n int32) bool {
+	return rcv._tab.MutateInt32Slot(14, n)
+}
+
 func PlayerStart(builder *flatbuffers.Builder) {
-	builder.StartObject(4)
+	builder.StartObject(6)
 }
 func PlayerAddId(builder *flatbuffers.Builder, id flatbuffers.UOffsetT) {
 	builder.PrependUOffsetTSlot(0, flatbuffers.UOffsetT(id), 0)
@@ -95,6 +119,12 @@ func PlayerAddX(builder *flatbuffers.Builder, x float64) {
 }
 func PlayerAddY(builder *flatbuffers.Builder, y float64) {
 	builder.PrependFloat64Slot(3, y, 0.0)
+}
+func PlayerAddWidth(builder *flatbuffers.Builder, width int32) {
+	builder.PrependInt32Slot(4, width, 0)
+}
+func PlayerAddHeight(builder *flatbuffers.Builder, height int32) {
+	builder.PrependInt32Slot(5, height, 0)
 }
 func PlayerEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()

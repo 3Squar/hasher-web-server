@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"game_web_server/generated"
+	"game_web_server/pkg/entities"
+	"game_web_server/pkg/physics"
 	flatbuffers "github.com/google/flatbuffers/go"
 	"hash/fnv"
 	"log"
@@ -19,14 +21,11 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-type Position struct {
-	X float64 `json:"x"`
-	Y float64 `json:"y"`
-}
 type Player struct {
 	ID string `json:"id"`
 	IP string `json:"ip"`
-	Position
+	physics.Position
+	physics.Size
 }
 
 type ClientAction struct {
@@ -46,6 +45,7 @@ type GameHandler struct {
 	connections map[string]*websocket.Conn
 	players     map[string]*Player
 	actions     map[string]*ActionProcessor
+	entities    entities.Entities
 }
 
 func makeActionName(action uint16, key string) string {
@@ -117,7 +117,7 @@ func (h *GameHandler) serveWebSocket(ctx *fasthttp.RequestCtx) {
 			newPlayer := &Player{
 				ID: playerId,
 				IP: remoteStrAddr,
-				Position: Position{
+				Position: physics.Position{
 					X: 250,
 					Y: 250,
 				},
@@ -237,7 +237,7 @@ func generateSchemas() error {
 
 	// Определяем типы для которых нужно сгенерировать схемы
 	types := map[string]reflect.Type{
-		"Position":     reflect.TypeOf(Position{}),
+		"Position":     reflect.TypeOf(physics.Position{}),
 		"Player":       reflect.TypeOf(Player{}),
 		"GameHandler":  reflect.TypeOf(GameHandler{}),
 		"ClientAction": reflect.TypeOf(ClientAction{}),
@@ -314,6 +314,17 @@ func main() {
 		connections: make(map[string]*websocket.Conn),
 		players:     make(map[string]*Player),
 		actions:     make(map[string]*ActionProcessor),
+		entities:    make(map[string]*entities.Entity),
+	}
+
+	entityLoader := entities.NewEntitiesLoader("entities")
+	if err := entityLoader.Load(&gameHandler.entities); err != nil {
+		log.Printf("Entities load failed: %v", err)
+		panic(err.Error())
+	}
+
+	for _, entity := range gameHandler.entities {
+		fmt.Println("Entity loaded:", entity)
 	}
 
 	//1 - for player move

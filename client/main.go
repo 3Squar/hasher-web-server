@@ -85,11 +85,9 @@ func roomConnector(keyNamePressed <-chan string) {
 			builder.Finish(clientAction)
 			finalBuild := builder.FinishedBytes()
 
-			//fmt.Println("Send ressed key %s", keyN)
-
 			err := c.WriteMessage(websocket.TextMessage, finalBuild)
 			if err != nil {
-				//log.Println("write:", err)
+				log.Println("write:", err)
 				return
 			}
 		}

@@ -3,18 +3,27 @@ package entities
 import (
 	"encoding/json"
 	"fmt"
-	"game_web_server/pkg/physics"
 	"github.com/google/uuid"
 	"os"
 	"path/filepath"
 )
 
+type Position struct {
+	X int `json:"x"`
+	Y int `json:"y"`
+}
+
+type Size struct {
+	Width  int `json:"width"`
+	Height int `json:"height"`
+}
+
 type Entity struct {
 	Name        string `json:"name"`
 	Image       string `json:"image"`
 	IsCollision bool   `json:"is_collision"`
-	physics.Position
-	physics.Size
+	Position
+	Size
 }
 
 type Entities map[string]*Entity

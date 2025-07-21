@@ -18,6 +18,7 @@ require (
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/savsgio/gotils v0.0.0-20240704082632-aef3928b8a38 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
+	github.com/yuin/gopher-lua v1.1.1 // indirect
 	golang.org/x/exp v0.0.0-20240707233637-46b078467d37 // indirect
 	golang.org/x/exp/shiny v0.0.0-20240707233637-46b078467d37 // indirect
 	golang.org/x/image v0.29.0 // indirect

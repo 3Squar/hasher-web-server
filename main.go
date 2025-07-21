@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"game_web_server/pkg/entities"
 	"game_web_server/pkg/physics"
-	lua "github.com/yuin/gopher-lua"
 	"hash/fnv"
 	"log"
 	"net"
@@ -316,9 +315,9 @@ func main() {
 		fmt.Println("Entity loaded:", entity)
 	}
 
-	L := lua.NewState()
-	defer L.Close()
-	L.SetGlobal("AttemptMove", L.NewFunction(physics.AttemptMove))
+	//L := lua.NewState()
+	//defer L.Close()
+	//L.SetGlobal("AttemptMove", L.NewFunction(physics.AttemptMove))
 
 	fmt.Println("\nStarting web server on :8080...")
 	err := fasthttp.ListenAndServe(":8080", gameHandler.HandleFastHTTP)

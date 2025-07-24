@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"game_web_server/pkg/entities"
 	"game_web_server/pkg/physics"
+	"game_web_server/pkg/scripts"
 	"hash/fnv"
 	"log"
 	"net"
+	"plugin"
 	"reflect"
 	"strconv"
 	"sync"
@@ -286,8 +288,6 @@ func compileSchemas() error {
 //		h.mut.Unlock()
 //	}
 func main() {
-	fmt.Println("Hello World")
-
 	// Генерируем FlatBuffer схемы при запуске
 	if err := generateSchemas(); err != nil {
 		log.Printf("Schema generation failed: %v", err)
@@ -307,7 +307,6 @@ func main() {
 
 	entityLoader := entities.NewEntitiesLoader("entities")
 	if err := entityLoader.Load(&physics.ALL_ENTITIES); err != nil {
-		log.Printf("Entities load failed: %v", err)
 		panic(err.Error())
 	}
 
@@ -315,14 +314,33 @@ func main() {
 		fmt.Println("Entity loaded:", entity)
 	}
 
+	if err := scripts.BuildPlugins("scripts"); err != nil {
+		panic(err.Error())
+	}
+
+	//var plugins := []string{
+	//	"scripts/player_persone.so",
+	//}
+
+	p, err := plugin.Open("scripts/player_persone.so")
+	if err != nil {
+		panic(err)
+	}
+
+	sym, err := p.Lookup("Start")
+	if err != nil {
+		panic(err)
+	}
+
+	initFunc := sym.(func())
+	initFunc()
+
 	//L := lua.NewState()
 	//defer L.Close()
 	//L.SetGlobal("AttemptMove", L.NewFunction(physics.AttemptMove))
 
 	fmt.Println("\nStarting web server on :8080...")
-	err := fasthttp.ListenAndServe(":8080", gameHandler.HandleFastHTTP)
-	if err != nil {
-		log.Fatalln(err)
-		return
+	if err := fasthttp.ListenAndServe(":8080", gameHandler.HandleFastHTTP); err != nil {
+		panic(err.Error())
 	}
 }

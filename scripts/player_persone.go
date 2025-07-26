@@ -3,12 +3,14 @@
 package main
 
 import (
-	"game_web_server/pkg/scripts"
+	"fmt"
+	"game_web_server/pkg/core"
 )
 
-func Start() {
-	ph := scripts.InitPhysicsAPI()
-	if err := ph.SetPosition(10.0, 22.9); err != nil {
-		panic(err)
-	}
+func Start(e *core.Engine) {
+	fmt.Println("Plugin player_persone started! --> ")
+	//fmt.Println("Starting")
+	//if err := e.SetPosition(10.0, 22.9); err != nil {
+	//	panic(err)
+	//}
 }

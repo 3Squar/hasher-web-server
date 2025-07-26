@@ -3,8 +3,8 @@ package main
 import (
 	"encoding/hex"
 	"fmt"
+	"game_web_server/pkg/core"
 	"game_web_server/pkg/entities"
-	"game_web_server/pkg/physics"
 	"game_web_server/pkg/scripts"
 	"hash/fnv"
 	"log"
@@ -302,11 +302,13 @@ func main() {
 
 	gameHandler := &GameHandler{
 		connections: make(map[string]*websocket.Conn),
-		entities:    make(map[string]*entities.Entity),
+		//entities:    make(map[string]*entities.Entity),
 	}
 
 	entityLoader := entities.NewEntitiesLoader("entities")
-	if err := entityLoader.Load(&physics.ALL_ENTITIES); err != nil {
+
+	var gameEntities entities.Entities
+	if err := entityLoader.Load(&gameEntities); err != nil {
 		panic(err.Error())
 	}
 
@@ -314,30 +316,30 @@ func main() {
 		fmt.Println("Entity loaded:", entity)
 	}
 
-	if err := scripts.BuildPlugins("scripts"); err != nil {
+	engine := core.NewEngine(&gameEntities)
+	pluginsFiles, err := scripts.BuildPlugins("scripts")
+	if err != nil {
 		panic(err.Error())
 	}
 
-	//var plugins := []string{
-	//	"scripts/player_persone.so",
-	//}
+	fmt.Println("Plugins loaded:", pluginsFiles)
 
-	p, err := plugin.Open("scripts/player_persone.so")
-	if err != nil {
-		panic(err)
+	for _, filename := range pluginsFiles {
+		path := "scripts/" + filename
+		fmt.Println("Loading plugin:", path)
+		p, err := plugin.Open(path)
+		if err != nil {
+			panic(err)
+		}
+
+		sym, err := p.Lookup("Start")
+		if err != nil {
+			panic(err)
+		}
+
+		initFunc := sym.(func(*core.Engine))
+		go initFunc(engine)
 	}
-
-	sym, err := p.Lookup("Start")
-	if err != nil {
-		panic(err)
-	}
-
-	initFunc := sym.(func())
-	initFunc()
-
-	//L := lua.NewState()
-	//defer L.Close()
-	//L.SetGlobal("AttemptMove", L.NewFunction(physics.AttemptMove))
 
 	fmt.Println("\nStarting web server on :8080...")
 	if err := fasthttp.ListenAndServe(":8080", gameHandler.HandleFastHTTP); err != nil {

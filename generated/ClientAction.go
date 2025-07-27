@@ -41,16 +41,12 @@ func (rcv *ClientAction) Table() flatbuffers.Table {
 	return rcv._tab
 }
 
-func (rcv *ClientAction) Action() uint16 {
+func (rcv *ClientAction) Action() []byte {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
 	if o != 0 {
-		return rcv._tab.GetUint16(o + rcv._tab.Pos)
+		return rcv._tab.ByteVector(o + rcv._tab.Pos)
 	}
-	return 0
-}
-
-func (rcv *ClientAction) MutateAction(n uint16) bool {
-	return rcv._tab.MutateUint16Slot(4, n)
+	return nil
 }
 
 func (rcv *ClientAction) Key() []byte {
@@ -64,8 +60,8 @@ func (rcv *ClientAction) Key() []byte {
 func ClientActionStart(builder *flatbuffers.Builder) {
 	builder.StartObject(2)
 }
-func ClientActionAddAction(builder *flatbuffers.Builder, action uint16) {
-	builder.PrependUint16Slot(0, action, 0)
+func ClientActionAddAction(builder *flatbuffers.Builder, action flatbuffers.UOffsetT) {
+	builder.PrependUOffsetTSlot(0, flatbuffers.UOffsetT(action), 0)
 }
 func ClientActionAddKey(builder *flatbuffers.Builder, key flatbuffers.UOffsetT) {
 	builder.PrependUOffsetTSlot(1, flatbuffers.UOffsetT(key), 0)

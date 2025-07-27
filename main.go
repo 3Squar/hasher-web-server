@@ -3,16 +3,16 @@ package main
 import (
 	"encoding/hex"
 	"fmt"
+	"game_web_server/generated"
+	"hash/fnv"
+	"log"
+	"plugin"
+	"reflect"
+	"sync"
+
 	"game_web_server/pkg/core"
 	"game_web_server/pkg/entities"
 	"game_web_server/pkg/scripts"
-	"hash/fnv"
-	"log"
-	"net"
-	"plugin"
-	"reflect"
-	"strconv"
-	"sync"
 
 	"game_web_server/pkg/schema"
 
@@ -20,12 +20,7 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-type ClientAction struct {
-	Action uint16 `json:"action"`
-	Key    string `json:"key"`
-}
-
-//type ActionHandlerType = func(conn *websocket.Conn, player *entities.Player)
+// type ActionHandlerType = func(conn *websocket.Conn, player *entities.Player)
 
 //type ActionProcessor struct {
 //	handler ActionHandlerType
@@ -35,15 +30,13 @@ type ClientAction struct {
 type GameHandler struct {
 	mut         sync.Mutex
 	connections map[string]*websocket.Conn
-	//players     map[string]*entities.Player
-	//actions  map[string]*ActionProcessor
-	entities entities.Entities
+	engine      *core.Engine
 }
 
-func makeActionName(action uint16, key string) string {
+/* func makeActionName(action uint16, key string) string {
 	strAction := strconv.Itoa(int(action))
 	return strAction + "_" + key
-}
+} */
 
 //func (h *GameHandler) GetHandlerByAction(action uint16, key string) (*ActionProcessor, error) {
 //	actionName := makeActionName(action, key)
@@ -75,7 +68,7 @@ func hash(str string) string {
 	return result
 }
 
-func hashIP(address string) string {
+/* func hashIP(address string) string {
 	// Извлекаем только IP, убираем порт
 	host, _, err := net.SplitHostPort(address)
 	if err != nil {
@@ -84,7 +77,7 @@ func hashIP(address string) string {
 	}
 
 	return hash(host)
-}
+} */
 
 func (h *GameHandler) serveWebSocket(ctx *fasthttp.RequestCtx) {
 	upgrader := websocket.FastHTTPUpgrader{
@@ -95,66 +88,32 @@ func (h *GameHandler) serveWebSocket(ctx *fasthttp.RequestCtx) {
 
 	err := upgrader.Upgrade(ctx, func(conn *websocket.Conn) {
 		remoteStrAddr := conn.RemoteAddr().String()
-		playerId := hash(remoteStrAddr)
+		playerID := hash(remoteStrAddr)
 
 		defer func() {
 			conn.Close()
-			h.connections[playerId] = nil
+			h.connections[playerID] = nil
 		}()
 
-		h.connections[playerId] = conn
-		//_, ok := h.players[playerId]
-		//if !ok {
-		//	h.mut.Lock()
-		//	newPlayer := &entities.Player{
-		//		ID: playerId,
-		//		IP: remoteStrAddr,
-		//		Position: physics.Position{
-		//			X: 250,
-		//			Y: 250,
-		//		},
-		//	}
-		//
-		//	h.players[playerId] = newPlayer
-		//	h.mut.Unlock()
-		//}
-		//
-		//var player = h.players[playerId]
-		//
-		//go h.broadcastPlayer(player)
-		//
-		//fmt.Printf("WebSocket connection from: %s\n", ctx.RemoteAddr())
-		//fmt.Println(player.ID, player.Position.X, player.Position.Y)
+		h.connections[playerID] = conn
 
 		for {
-			//message
-			_, _, err := conn.ReadMessage()
+			_, message, err := conn.ReadMessage()
 			if err != nil {
 				log.Println("Read error:", err)
 				break
 			}
 
-			//log.Printf("Receive message type: %d\n", messageType)
+			clientAction := generated.GetRootAsClientAction(message, 0)
+			if clientAction == nil {
+				log.Println("ClientAction is nil!")
+				continue
+			}
 
-			//clientAction := generated.GetRootAsClientAction(message, 0)
-			//if clientAction == nil {
-			//	log.Println("ClientAction is nil!")
-			//	continue
-			//}
-			//
-			//action := clientAction.Action()
-			//keyName := string(clientAction.Key())
-			//processor, err := h.GetHandlerByAction(action, keyName)
-			//if err != nil {
-			//	log.Println("[Error found action]", action, err.Error())
-			//	continue
-			//}
-
-			//processor.handler(conn, player)
-			//h.broadcastPlayer(player)
+			fmt.Println(">>", string(clientAction.Key()), string(clientAction.Action()))
+			h.engine.CActionChan <- clientAction
 		}
 	})
-
 	if err != nil {
 		log.Printf("WebSocket upgrade failed: %v", err)
 		ctx.Error("WebSocket upgrade failed", fasthttp.StatusInternalServerError)
@@ -216,6 +175,11 @@ func (h *GameHandler) HandleFastHTTP(ctx *fasthttp.RequestCtx) {
 	}
 }
 
+type ClientAction struct {
+	Name string `json:"action"`
+	Key  string `json:"key"`
+}
+
 // generateSchemas генерирует FlatBuffer схемы для всех структур в программе
 func generateSchemas() error {
 	fmt.Println("Generating FlatBuffer schemas...")
@@ -264,29 +228,6 @@ func compileSchemas() error {
 	return nil
 }
 
-//	func (h *GameHandler) handleMoveUp(conn *websocket.Conn, player *entities.Player) {
-//		h.mut.Lock()
-//		player.Position.Y += 10
-//		h.mut.Unlock()
-//	}
-//
-//	func (h *GameHandler) handleMoveDown(conn *websocket.Conn, player *entities.Player) {
-//		h.mut.Lock()
-//		player.Position.Y -= 10
-//		h.mut.Unlock()
-//	}
-//
-//	func (h *GameHandler) handleMoveLeft(conn *websocket.Conn, player *entities.Player) {
-//		h.mut.Lock()
-//		player.Position.X -= 10
-//		h.mut.Unlock()
-//	}
-//
-//	func (h *GameHandler) handleMoveRight(conn *websocket.Conn, player *entities.Player) {
-//		h.mut.Lock()
-//		player.Position.X += 10
-//		h.mut.Unlock()
-//	}
 func main() {
 	// Генерируем FlatBuffer схемы при запуске
 	if err := generateSchemas(); err != nil {
@@ -300,23 +241,21 @@ func main() {
 		return
 	}
 
-	gameHandler := &GameHandler{
-		connections: make(map[string]*websocket.Conn),
-		//entities:    make(map[string]*entities.Entity),
-	}
-
 	entityLoader := entities.NewEntitiesLoader("entities")
 
-	var gameEntities entities.Entities
+	var gameEntities = make(entities.Entities)
 	if err := entityLoader.Load(&gameEntities); err != nil {
 		panic(err.Error())
 	}
 
-	for _, entity := range gameHandler.entities {
-		fmt.Println("Entity loaded:", entity)
+	engine := core.NewEngine(&gameEntities)
+	engine.Start()
+
+	gameHandler := &GameHandler{
+		connections: make(map[string]*websocket.Conn),
+		engine:      engine,
 	}
 
-	engine := core.NewEngine(&gameEntities)
 	pluginsFiles, err := scripts.BuildPlugins("scripts")
 	if err != nil {
 		panic(err.Error())
@@ -342,6 +281,7 @@ func main() {
 	}
 
 	fmt.Println("\nStarting web server on :8080...")
+
 	if err := fasthttp.ListenAndServe(":8080", gameHandler.HandleFastHTTP); err != nil {
 		panic(err.Error())
 	}

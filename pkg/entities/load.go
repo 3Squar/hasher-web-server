@@ -26,6 +26,10 @@ type Entity struct {
 	Size
 }
 
+func (e *Entity) SetPosition(newPos Position) {
+	e.Position = newPos
+}
+
 type Entities map[string]*Entity
 
 type EntityLoader struct {

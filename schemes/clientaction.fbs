@@ -1,6 +1,6 @@
 namespace GameServer;
 
 table ClientAction {
-  action: uint16;
+  action: string;
   key: string;
 }

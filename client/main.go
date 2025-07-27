@@ -76,9 +76,10 @@ func roomConnector(keyNamePressed <-chan string) {
 		case keyN := <-keyNamePressed:
 			builder := flatbuffers.NewBuilder(1024)
 			buildKeyToStr := builder.CreateString(keyN)
+			buildActionToStr := builder.CreateString("player_gun")
 
 			generated.ClientActionStart(builder)
-			generated.ClientActionAddAction(builder, 1)
+			generated.ClientActionAddAction(builder, buildActionToStr)
 			generated.ClientActionAddKey(builder, buildKeyToStr)
 			clientAction := generated.ClientActionEnd(builder)
 

@@ -3,12 +3,13 @@ package main
 import (
 	"encoding/hex"
 	"fmt"
-	"game_web_server/generated"
 	"hash/fnv"
 	"log"
 	"plugin"
 	"reflect"
 	"sync"
+
+	"game_web_server/generated"
 
 	"game_web_server/pkg/core"
 	"game_web_server/pkg/entities"
@@ -33,21 +34,6 @@ type GameHandler struct {
 	engine      *core.Engine
 }
 
-/* func makeActionName(action uint16, key string) string {
-	strAction := strconv.Itoa(int(action))
-	return strAction + "_" + key
-} */
-
-//func (h *GameHandler) GetHandlerByAction(action uint16, key string) (*ActionProcessor, error) {
-//	actionName := makeActionName(action, key)
-//
-//	if _, ok := h.actions[actionName]; ok {
-//		return h.actions[actionName], nil
-//	}
-//
-//	return nil, errors.New("action not found")
-//}
-
 func (h *GameHandler) pingPongHandler(ctx *fasthttp.RequestCtx) {
 	fmt.Fprint(ctx, "pong")
 }
@@ -68,21 +54,10 @@ func hash(str string) string {
 	return result
 }
 
-/* func hashIP(address string) string {
-	// Извлекаем только IP, убираем порт
-	host, _, err := net.SplitHostPort(address)
-	if err != nil {
-		// Если нет порта, используем всю строку
-		host = address
-	}
-
-	return hash(host)
-} */
-
 func (h *GameHandler) serveWebSocket(ctx *fasthttp.RequestCtx) {
 	upgrader := websocket.FastHTTPUpgrader{
 		CheckOrigin: func(ctx *fasthttp.RequestCtx) bool {
-			return true // Allow all origins for now
+			return true
 		},
 	}
 
@@ -214,11 +189,7 @@ func generateSchemas() error {
 func compileSchemas() error {
 	fmt.Println("\nCompiling FlatBuffer schemas to Go code...")
 
-	// Создаем компилятор FlatBuffer схем
-	// Указываем "." как выходную директорию, чтобы файлы попали в generated/ а не generated/generated/
 	compiler := schema.NewCompiler("schemes", ".")
-
-	// Компилируем схемы в Go код с пакетом "generated"
 	err := compiler.CompileSchemasWithPackage("generated")
 	if err != nil {
 		return fmt.Errorf("failed to compile FlatBuffer schemas: %v", err)
@@ -228,22 +199,38 @@ func compileSchemas() error {
 	return nil
 }
 
+func pluginsRunner(e *core.Engine, files []string) {
+	for _, filename := range files {
+		path := "scripts/" + filename
+		fmt.Println("Loading plugin:", path)
+		p, err := plugin.Open(path)
+		if err != nil {
+			panic(err)
+		}
+
+		sym, err := p.Lookup("Start")
+		if err != nil {
+			panic(err)
+		}
+
+		initFunc := sym.(func(*core.Engine))
+		go initFunc(e)
+	}
+}
+
 func main() {
-	// Генерируем FlatBuffer схемы при запуске
 	if err := generateSchemas(); err != nil {
 		log.Printf("Schema generation failed: %v", err)
 		return
 	}
 
-	// Компилируем FlatBuffer схемы в Go код
 	if err := compileSchemas(); err != nil {
 		log.Printf("Schema compilation failed: %v", err)
 		return
 	}
 
 	entityLoader := entities.NewEntitiesLoader("entities")
-
-	var gameEntities = make(entities.Entities)
+	gameEntities := make(entities.Entities)
 	if err := entityLoader.Load(&gameEntities); err != nil {
 		panic(err.Error())
 	}
@@ -261,24 +248,7 @@ func main() {
 		panic(err.Error())
 	}
 
-	fmt.Println("Plugins loaded:", pluginsFiles)
-
-	for _, filename := range pluginsFiles {
-		path := "scripts/" + filename
-		fmt.Println("Loading plugin:", path)
-		p, err := plugin.Open(path)
-		if err != nil {
-			panic(err)
-		}
-
-		sym, err := p.Lookup("Start")
-		if err != nil {
-			panic(err)
-		}
-
-		initFunc := sym.(func(*core.Engine))
-		go initFunc(engine)
-	}
+	pluginsRunner(engine, pluginsFiles)
 
 	fmt.Println("\nStarting web server on :8080...")
 

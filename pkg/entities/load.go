@@ -18,6 +18,10 @@ type Size struct {
 	Height int `json:"height"`
 }
 
+//TODO: Сделать Observer который наблюдает за изменениями
+//TODO: Сделать Обработку колизий и тригеров
+//TODO: Сделать отправку на клент если что-то изменилось
+
 type Entity struct {
 	Name        string `json:"name"`
 	Image       string `json:"image"`

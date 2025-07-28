@@ -12,18 +12,30 @@ func ActionCallback(e *core.Engine) error {
 
 	//тут научить брать текущию позицию entity в кординатах по оси x, y
 	var entityName = "player_1"
+	playerEntity := e.EntityManager.GetByName(entityName)
+	if playerEntity == nil {
+		fmt.Println("Entity is nil: ", entityName)
+		return nil
+	}
 
-	playerEntity := e.GetEntityByName(entityName)
-	playerEntity.SetPosition(entities.Position{
+	e.EntityManager.SetPosition(entityName, entities.Position{
 		X: playerEntity.Position.X + 5,
 		Y: playerEntity.Position.Y + 5,
-	})
+	})	
 
 	return nil
 }
 
 func Start(e *core.Engine) {
 	fmt.Println("Run plugin --> ")
+
+	entityUpdates := e.EntityManager.Subscribe()
+
+	go func() {
+		for update := range entityUpdates {
+			fmt.Println("Entity update ---->", update)
+		}
+	}()
 
 	var actionName = "player_gun"
 	chanSub := e.Subscribe(actionName)

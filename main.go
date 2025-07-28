@@ -8,25 +8,13 @@ import (
 	"plugin"
 	"reflect"
 	"sync"
-
 	"game_web_server/generated"
-
 	"game_web_server/pkg/core"
-	"game_web_server/pkg/entities"
 	"game_web_server/pkg/scripts"
-
 	"game_web_server/pkg/schema"
-
 	"github.com/fasthttp/websocket"
 	"github.com/valyala/fasthttp"
 )
-
-// type ActionHandlerType = func(conn *websocket.Conn, player *entities.Player)
-
-//type ActionProcessor struct {
-//	handler ActionHandlerType
-//	key     string
-//}
 
 type GameHandler struct {
 	mut         sync.Mutex
@@ -229,13 +217,7 @@ func main() {
 		return
 	}
 
-	entityLoader := entities.NewEntitiesLoader("entities")
-	gameEntities := make(entities.Entities)
-	if err := entityLoader.Load(&gameEntities); err != nil {
-		panic(err.Error())
-	}
-
-	engine := core.NewEngine(&gameEntities)
+	engine := core.NewEngine()
 	engine.Start()
 
 	gameHandler := &GameHandler{

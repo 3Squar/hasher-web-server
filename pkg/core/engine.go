@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"game_web_server/generated"
 	"game_web_server/pkg/entities"
-
 	"github.com/google/uuid"
 )
 
@@ -45,13 +44,9 @@ func (e *Engine) NewAction(name string, callback ActionCallback) *Action {
 }
 
 type Engine struct {
-	Entities    *entities.Entities
+	EntityManager entities.EntityManager
 	CActionChan chan *generated.ClientAction
 	subscribers map[string][]chan *Action
-}
-
-func (e *Engine) GetEntityByName(name string) *entities.Entity {
-	return (*e.Entities)[name]
 }
 
 func (e *Engine) Subscribe(actionName string) <-chan *Action {
@@ -82,9 +77,14 @@ func (e *Engine) dispatcher() {
 	}
 }
 
-func NewEngine(entities *entities.Entities) *Engine {
+func NewEngine() *Engine {
+	var manager = entities.NewEntityManager()
+	if err := manager.Init(); err != nil {
+		panic(err)
+	}
+
 	return &Engine{
-		Entities:    entities,
+		EntityManager: *manager,
 		CActionChan: make(chan *generated.ClientAction),
 		subscribers: make(map[string][]chan *Action),
 	}
@@ -92,6 +92,14 @@ func NewEngine(entities *entities.Entities) *Engine {
 
 func (e *Engine) Start() {
 	go e.dispatcher()
+
+	channelManager := e.EntityManager.Subscribe()
+	
+	go func () {
+		for change := range channelManager {
+			fmt.Println("Boardcast to players", change.Name, change.Type)
+		}
+	}()
 }
 
 //func isOverlapping(x1, y1, w1, h1, x2, y2, w2, h2 int) bool {

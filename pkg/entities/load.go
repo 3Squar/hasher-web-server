@@ -3,7 +3,6 @@ package entities
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/google/uuid"
 	"os"
 	"path/filepath"
 )
@@ -30,8 +29,69 @@ type Entity struct {
 	Size
 }
 
-func (e *Entity) SetPosition(newPos Position) {
-	e.Position = newPos
+type EntityUpdate struct {
+	Name string
+	Type string
+	Data any
+}
+
+type EntityManager struct {
+	Entities
+	subscribers []chan EntityUpdate
+}
+
+func NewEntityManager() *EntityManager {
+	return &EntityManager{
+		Entities:    make(Entities),
+		subscribers: make([]chan EntityUpdate, 100),
+	}
+}
+
+func (em *EntityManager) Init() error {
+	entityLoader := NewEntitiesLoader("entities")
+	if err := entityLoader.Load(&em.Entities); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (em *EntityManager) Subscribe() <- chan EntityUpdate {
+	var channel = make(chan EntityUpdate)
+	em.subscribers = append(em.subscribers, channel)
+	return channel
+}
+
+func (em *EntityManager) notify(update EntityUpdate) {
+	for _, sub := range em.subscribers {
+		select {
+		case sub <- update:
+		default:
+
+		}
+	}
+}
+
+func (em *EntityManager) GetByName(name string) *Entity {
+		return em.Entities[name]
+}
+
+func (em *EntityManager) SetPosition(name string, newPos Position) {
+	if entity, ok := em.Entities[name]; ok {
+		if entity.Position.X != newPos.X || entity.Position.Y != newPos.Y {
+			entity.X = newPos.X
+			entity.Y = newPos.Y
+
+			em.notify(EntityUpdate{
+				Name: name,
+				Type: "position",
+				Data: map[string]int{
+					"x": newPos.X,
+					"y": newPos.Y,
+				},
+			})
+		}
+	}
 }
 
 type Entities map[string]*Entity
@@ -47,9 +107,7 @@ func NewEntitiesLoader(inputDir string) *EntityLoader {
 	}
 }
 
-func (el *EntityLoader) Load(en *Entities) error {
-	var entities = make(Entities)
-
+func (el *EntityLoader) Load(store *Entities) error {
 	err := filepath.Walk(el.InputDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -69,12 +127,12 @@ func (el *EntityLoader) Load(en *Entities) error {
 			return err
 		}
 
-		entityId, err := uuid.NewUUID()
-		if err != nil {
-			return err
-		}
+		// entityId, err := uuid.NewUUID()
+		// if err != nil {
+		// 	return err
+		// }
 
-		entities[entityId.String()] = &entity
+		(*store)[entity.Name] = &entity
 		return nil
 	})
 
@@ -83,11 +141,9 @@ func (el *EntityLoader) Load(en *Entities) error {
 		return err
 	}
 
-	for key, entity := range entities {
+	for key, entity := range *store {
 		fmt.Println("Loading", key, entity.Name, entity.Position, entity.Size)
 	}
-
-	en = &entities
 
 	return nil
 }
